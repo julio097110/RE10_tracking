@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS retrasos (
     cancelado INTEGER NOT NULL DEFAULT 0,
     tipo_incidencia TEXT NOT NULL,
     detectado_en TEXT NOT NULL,
-    avisado_telegram INTEGER NOT NULL DEFAULT 0
+    avisado_telegram INTEGER NOT NULL DEFAULT 0,
+    service_journey_id TEXT NOT NULL UNIQUE
 );
 """
 
@@ -68,36 +69,48 @@ def insertar_retraso(
     cancelado: bool,
     tipo_incidencia: str,
     detectado_en: str,
-) -> int:
+    service_journey_id: str,
+) -> int | None:
     """
     Guarda un nuevo registro de retraso/cancelación.
-    Devuelve el id que SQLite le ha asignado a la fila nueva.
+    Devuelve el id que SQLite le ha asignado a la fila nueva, o None si
+    ese viaje (service_journey_id) ya estaba guardado de antes (gracias
+    a la restricción UNIQUE de la columna, evitamos avisos duplicados).
     """
     conexion = crear_conexion()
 
-    # OJO: usamos "?" como placeholders y pasamos los valores en una tupla
-    # aparte, en vez de meterlos directamente en el texto del SQL con
-    # f-strings. Esto se llama "consulta parametrizada" y es la forma
-    # correcta y segura de hacerlo: evita errores si algún valor contiene
-    # comillas, y evita el fallo de seguridad conocido como "inyección SQL".
-    cursor = conexion.execute(
-        """
-        INSERT INTO retrasos (
-            fecha_viaje, linea, sentido, estacion_origen, estacion_destino,
-            hora_prevista_llegada, hora_real_llegada, retraso_minutos,
-            cancelado, tipo_incidencia, detectado_en
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            fecha_viaje, linea, sentido, estacion_origen, estacion_destino,
-            hora_prevista_llegada, hora_real_llegada, retraso_minutos,
-            int(cancelado), tipo_incidencia, detectado_en,
-        ),
-    )
-    conexion.commit()
-    nuevo_id = cursor.lastrowid
-    conexion.close()
-    return nuevo_id
+    try:
+        # OJO: usamos "?" como placeholders y pasamos los valores en una
+        # tupla aparte, en vez de meterlos directamente en el texto del SQL
+        # con f-strings. Esto se llama "consulta parametrizada" y es la
+        # forma correcta y segura de hacerlo: evita errores si algún valor
+        # contiene comillas, y evita la "inyección SQL".
+        cursor = conexion.execute(
+            """
+            INSERT INTO retrasos (
+                fecha_viaje, linea, sentido, estacion_origen, estacion_destino,
+                hora_prevista_llegada, hora_real_llegada, retraso_minutos,
+                cancelado, tipo_incidencia, detectado_en, service_journey_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fecha_viaje, linea, sentido, estacion_origen, estacion_destino,
+                hora_prevista_llegada, hora_real_llegada, retraso_minutos,
+                int(cancelado), tipo_incidencia, detectado_en, service_journey_id,
+            ),
+        )
+        conexion.commit()
+        nuevo_id = cursor.lastrowid
+        return nuevo_id
+    except sqlite3.IntegrityError:
+        # La restricción UNIQUE ha saltado: este viaje ya estaba guardado.
+        # No es un error real, es justo el control anti-duplicados
+        # funcionando como esperamos.
+        return None
+    finally:
+        # "finally" se ejecuta siempre, haya habido excepción o no -- así
+        # nos aseguramos de cerrar la conexión pase lo que pase.
+        conexion.close()
 
 
 def obtener_retrasos(desde_fecha: str | None = None) -> list[sqlite3.Row]:
@@ -145,8 +158,20 @@ if __name__ == "__main__":
         cancelado=False,
         tipo_incidencia="retraso",
         detectado_en="2026-08-27T09:15:00",
+        service_journey_id="VYG:ServiceJourney:PRUEBA-001",
     )
     print(f"Registro de prueba insertado con id={id_nuevo}")
+
+    # Si lo intentamos insertar otra vez con el mismo service_journey_id,
+    # debe devolver None en vez de crear una fila duplicada.
+    id_duplicado = insertar_retraso(
+        fecha_viaje="2026-08-27", linea="RE10", sentido="Oslo S -> Tangen",
+        estacion_origen="Oslo S", estacion_destino="Tangen",
+        hora_prevista_llegada="2026-08-27T09:00:00", hora_real_llegada="2026-08-27T09:30:00",
+        retraso_minutos=30, cancelado=False, tipo_incidencia="retraso",
+        detectado_en="2026-08-27T09:15:00", service_journey_id="VYG:ServiceJourney:PRUEBA-001",
+    )
+    print(f"Segundo intento con el mismo viaje -> id devuelto: {id_duplicado} (debe ser None)")
 
     # Y ahora lo leemos de vuelta para comprobar que se guardó bien.
     registros = obtener_retrasos()
