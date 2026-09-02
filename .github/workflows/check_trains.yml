@@ -23,6 +23,13 @@ jobs:
       - name: Instalar dependencias
         run: pip install -r requirements.txt
 
+      - name: PRUEBA TEMPORAL - enviar mensaje de test a Telegram
+        working-directory: src
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python telegram_bot.py
+
       - name: Comprobar retrasos y avisar por Telegram
         working-directory: src
         env:
