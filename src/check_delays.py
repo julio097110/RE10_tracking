@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 import db
 import entur_client as entur
+import telegram_bot
 
 UMBRAL_MINUTOS = 25
 
@@ -122,7 +123,21 @@ def revisar_sentido(config_sentido: dict) -> list[dict]:
         )
 
         if nuevo_id is not None:
-            guardados.append(llegada)
+            registro = {
+                "id": nuevo_id,
+                "sentido": config_sentido["sentido"],
+                "fecha_viaje": llegada["aimedArrivalTime"][:10],
+                "hora_prevista_llegada": llegada["aimedArrivalTime"],
+                "hora_real_llegada": resultado["hora_real_llegada"],
+                "retraso_minutos": resultado["retraso_minutos"],
+                "cancelado": resultado["cancelado"],
+            }
+
+            mensaje = telegram_bot.formatear_mensaje(registro)
+            if telegram_bot.enviar_alerta(mensaje):
+                db.marcar_avisado(nuevo_id)
+
+            guardados.append(registro)
 
     return guardados
 
@@ -144,3 +159,7 @@ if __name__ == "__main__":
             print(n)
     else:
         print("No hay nuevas incidencias que cumplan el criterio en esta revisión.")
+
+    borrados = db.borrar_antiguos(meses=3)
+    if borrados:
+        print(f"Limpieza: se han borrado {borrados} registros con más de 3 meses de antigüedad.")

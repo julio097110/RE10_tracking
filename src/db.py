@@ -16,7 +16,25 @@ from pathlib import Path
 # .parent sube una carpeta (a src/), y otro .parent sube otra (a la raíz del proyecto).
 # Así, sea cual sea la carpeta desde la que ejecutes el script, siempre
 # encuentra data/retrasos.db en el mismo sitio relativo al proyecto.
-RUTA_BD = Path(__file__).parent.parent / "data" / "retrasos.db"
+def _encontrar_raiz_proyecto() -> Path:
+    """
+    Busca la carpeta raíz del proyecto subiendo desde este archivo hasta
+    encontrar la que contiene 'requirements.txt'.
+
+    Esto hace que el código funcione igual tanto si tienes los .py sueltos
+    en una sola carpeta (como en tu ordenador) como si están organizados
+    en subcarpetas, por ejemplo con este archivo dentro de src/ (como en
+    GitHub) -- en ambos casos, requirements.txt está siempre en la raíz.
+    """
+    carpeta = Path(__file__).parent
+    while carpeta != carpeta.parent:  # hasta llegar a la raíz del disco
+        if (carpeta / "requirements.txt").exists():
+            return carpeta
+        carpeta = carpeta.parent
+    return Path(__file__).parent  # último recurso, si no la encuentra
+
+
+RUTA_BD = _encontrar_raiz_proyecto() / "data" / "retrasos.db"
 
 # Esto es SQL, no Python: es el lenguaje para hablar con la base de datos.
 # "CREATE TABLE IF NOT EXISTS" significa "créala solo si no existe ya",
@@ -136,6 +154,41 @@ def obtener_retrasos(desde_fecha: str | None = None) -> list[sqlite3.Row]:
 
     conexion.close()
     return filas
+
+
+def marcar_avisado(id_registro: int) -> None:
+    """Marca un registro como ya notificado por Telegram, para no volver a avisar de él."""
+    conexion = crear_conexion()
+    conexion.execute(
+        "UPDATE retrasos SET avisado_telegram = 1 WHERE id = ?",
+        (id_registro,),
+    )
+    conexion.commit()
+    conexion.close()
+
+
+def borrar_antiguos(meses: int = 3) -> int:
+    """
+    Borra los registros con fecha_viaje anterior a hoy menos 'meses' meses.
+    Devuelve cuántas filas se han borrado.
+    """
+    from datetime import date, timedelta
+
+    # Cálculo simple de "hace X meses": restamos meses*30 días. No es
+    # exacto al día (los meses no tienen todos 30 días), pero para un
+    # criterio de retención no hace falta más precisión que esa.
+    limite = date.today() - timedelta(days=meses * 30)
+    limite_texto = limite.isoformat()
+
+    conexion = crear_conexion()
+    cursor = conexion.execute(
+        "DELETE FROM retrasos WHERE fecha_viaje < ?",
+        (limite_texto,),
+    )
+    conexion.commit()
+    borrados = cursor.rowcount
+    conexion.close()
+    return borrados
 
 
 if __name__ == "__main__":

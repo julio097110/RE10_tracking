@@ -5,13 +5,21 @@ Consulta la JourneyPlanner API de Entur y devuelve las llegadas
 previstas/reales del RE10 en Oslo S y Tangen.
 """
 
+import time
+
 import requests
 
 URL_API = "https://api.entur.io/journey-planner/v3/graphql"
 
 # Entur exige identificarte con este header (no hace falta cuenta ni API key,
 # solo un texto con el formato "empresa-aplicacion").
-CABECERAS = {"ET-Client-Name": "julio-re10delaytracker"}
+# Añadimos también un User-Agent explícito: algunos servidores tratan de
+# forma más estricta (o incluso bloquean) las peticiones que llegan con el
+# User-Agent por defecto de la librería requests.
+CABECERAS = {
+    "ET-Client-Name": "julio-re10delaytracker",
+    "User-Agent": "re10-delay-tracker/1.0 (proyecto personal)",
+}
 
 OSLO_S = "NSR:StopPlace:59872"
 TANGEN = "NSR:StopPlace:60530"
@@ -63,13 +71,25 @@ def obtener_llegadas(stop_place_id: str, num_llegadas: int = 20, ventana_horas: 
         "timeRange": ventana_horas * 3600,
     }
 
-    respuesta = requests.post(
-        URL_API,
-        json={"query": QUERY, "variables": variables},
-        headers=CABECERAS,
-        timeout=15,
-    )
-    respuesta.raise_for_status()  # lanza un error si la petición falla (p.ej. 500)
+    # Reintentamos hasta 3 veces si hay un fallo de conexión (no si Entur
+    # responde con un error "de verdad", como un 400 por una consulta mal
+    # formada -- eso no se arregla reintentando).
+    intentos = 3
+    for intento in range(1, intentos + 1):
+        try:
+            respuesta = requests.post(
+                URL_API,
+                json={"query": QUERY, "variables": variables},
+                headers=CABECERAS,
+                timeout=15,
+            )
+            respuesta.raise_for_status()  # error si Entur responde con código de fallo (4xx/5xx)
+            break  # si ha ido bien, salimos del bucle de reintentos
+        except requests.exceptions.ConnectionError as error:
+            if intento == intentos:
+                raise  # ya hemos agotado los reintentos, dejamos que falle de verdad
+            print(f"Fallo de conexión (intento {intento}/{intentos}): {error}. Reintentando en 5s...")
+            time.sleep(5)
 
     datos = respuesta.json()
     llamadas = datos["data"]["stopPlace"]["estimatedCalls"]
