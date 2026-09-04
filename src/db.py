@@ -63,11 +63,32 @@ CREATE TABLE IF NOT EXISTS retrasos (
 """
 
 
+def _migrar_columnas(conexion: sqlite3.Connection) -> None:
+    """
+    Si la tabla 'retrasos' ya existía de antes (por ejemplo, porque la
+    creó una versión anterior de este código), puede que le falten
+    columnas nuevas. CREATE TABLE IF NOT EXISTS no las añade solo, así
+    que las comprobamos aquí y las creamos si hace falta.
+    """
+    columnas_esperadas = {
+        "paso_por_origen": "INTEGER",
+        "ultima_parada": "TEXT",
+        "paradas_intermedias": "TEXT",
+    }
+    columnas_actuales = {fila[1] for fila in conexion.execute("PRAGMA table_info(retrasos)")}
+
+    for columna, tipo in columnas_esperadas.items():
+        if columna not in columnas_actuales:
+            conexion.execute(f"ALTER TABLE retrasos ADD COLUMN {columna} {tipo}")
+
+    conexion.commit()
+
+
 def crear_conexion() -> sqlite3.Connection:
     """
     Abre (o crea si no existe) el fichero de base de datos, se asegura
-    de que la tabla 'retrasos' existe, y devuelve la conexión lista
-    para usar.
+    de que la tabla 'retrasos' existe y tiene todas las columnas
+    esperadas, y devuelve la conexión lista para usar.
     """
     # Si la carpeta "data" no existe todavía, la creamos.
     RUTA_BD.parent.mkdir(parents=True, exist_ok=True)
@@ -75,6 +96,7 @@ def crear_conexion() -> sqlite3.Connection:
     conexion = sqlite3.connect(RUTA_BD)
     conexion.execute(SQL_CREAR_TABLA)
     conexion.commit()  # guarda los cambios en el fichero de forma permanente
+    _migrar_columnas(conexion)
     return conexion
 
 
