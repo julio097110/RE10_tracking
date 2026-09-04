@@ -7,6 +7,7 @@ consultarlo desde GitHub Pages.
 """
 
 import db
+import utils
 
 RUTA_HTML = db._encontrar_raiz_proyecto() / "docs" / "index.html"
 
@@ -53,14 +54,14 @@ def _formatear_fila(registro) -> str:
     else:
         clase_css = "retraso"
         tipo_texto = f"{registro['retraso_minutos']} min tarde"
-        hora_real = registro["hora_real_llegada"]
+        hora_real = utils.formatear_hora(registro["hora_real_llegada"])
 
     return FILA_TABLA.format(
         fecha_viaje=registro["fecha_viaje"],
         sentido=registro["sentido"],
         clase_css=clase_css,
         tipo_texto=tipo_texto,
-        hora_prevista=registro["hora_prevista_llegada"],
+        hora_prevista=utils.formatear_hora(registro["hora_prevista_llegada"]),
         hora_real=hora_real,
     )
 

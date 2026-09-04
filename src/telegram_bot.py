@@ -13,6 +13,8 @@ import os
 
 import requests
 
+import utils
+
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
@@ -54,7 +56,7 @@ def formatear_mensaje(registro: dict) -> str:
             f"🚫 RE10 CANCELADO\n"
             f"Sentido: {registro['sentido']}\n"
             f"Fecha: {registro['fecha_viaje']}\n"
-            f"Hora prevista: {registro['hora_prevista_llegada']}"
+            f"Hora prevista: {utils.formatear_hora(registro['hora_prevista_llegada'])}"
         )
 
     return (
@@ -62,8 +64,8 @@ def formatear_mensaje(registro: dict) -> str:
         f"Sentido: {registro['sentido']}\n"
         f"Fecha: {registro['fecha_viaje']}\n"
         f"Retraso: {registro['retraso_minutos']} min\n"
-        f"Hora prevista: {registro['hora_prevista_llegada']}\n"
-        f"Hora real: {registro['hora_real_llegada']}"
+        f"Hora prevista: {utils.formatear_hora(registro['hora_prevista_llegada'])}\n"
+        f"Hora real: {utils.formatear_hora(registro['hora_real_llegada'])}"
     )
 
 
