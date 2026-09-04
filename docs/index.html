@@ -2,29 +2,259 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>RE10 - Retrasos reclamables</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RE10 · Retrasos reclamables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  body { font-family: sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.4rem; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
-  th { background: #f4f4f4; }
-  .cancelado { color: #b00020; font-weight: bold; }
-  .retraso { color: #b26a00; }
-  .actualizado { color: #666; font-size: 0.85rem; margin-top: 1.5rem; }
+  :root {
+    --bg: #14171A;
+    --panel: #1B1F23;
+    --panel-border: #2A2F35;
+    --texto: #E8E6DF;
+    --texto-tenue: #7C8289;
+    --ambar: #E8A33D;
+    --rojo: #D64545;
+    --verde: #6FBF8B;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--texto);
+    font-family: "IBM Plex Sans", sans-serif;
+    margin: 0;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+
+  main { max-width: 760px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--panel-border);
+    padding-bottom: 1.25rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: 0.02em;
+  }
+
+  h1 .linea {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--ambar);
+  }
+
+  .subtitulo {
+    color: var(--texto-tenue);
+    font-size: 0.9rem;
+    margin: 0.35rem 0 0;
+  }
+
+  .estado {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    color: var(--texto-tenue);
+  }
+
+  .punto {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--verde);
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--panel-border);
+    margin: 1.5rem 0;
+    border: 1px solid var(--panel-border);
+  }
+
+  .stat {
+    background: var(--panel);
+    padding: 1rem 1.1rem;
+  }
+
+  .stat .valor {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 1.6rem;
+    font-weight: 500;
+  }
+
+  .stat .etiqueta {
+    font-size: 0.78rem;
+    color: var(--texto-tenue);
+    margin-top: 0.2rem;
+  }
+
+  .panel-lista {
+    border: 1px solid var(--panel-border);
+  }
+
+  .cabecera-lista {
+    display: grid;
+    grid-template-columns: 100px 150px 1fr 130px 130px;
+    gap: 0.5rem;
+    padding: 0.7rem 0.9rem;
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    color: var(--texto-tenue);
+    border-bottom: 1px solid var(--panel-border);
+  }
+
+  .fila-item {
+    border-bottom: 1px solid var(--panel-border);
+    background: var(--panel);
+  }
+
+  .fila-item:last-child { border-bottom: none; }
+
+  .fila-resumen {
+    display: grid;
+    grid-template-columns: 100px 150px 1fr 130px 130px;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.7rem 0.9rem;
+    cursor: pointer;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    list-style: none;
+  }
+
+  .fila-resumen::-webkit-details-marker { display: none; }
+
+  .fila-item[open] .fila-resumen { border-bottom: 1px solid var(--panel-border); }
+
+  .fila-detalle { padding: 0.8rem 0.9rem 1rem; }
+
+  .sin-detalle {
+    color: var(--texto-tenue);
+    font-size: 0.8rem;
+    margin: 0;
+    font-family: "IBM Plex Sans", sans-serif;
+  }
+
+  .estado-fila {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.78rem;
+  }
+
+  .estado-fila.retraso { color: var(--ambar); background: rgba(232, 163, 61, 0.12); }
+  .estado-fila.cancelado { color: var(--rojo); background: rgba(214, 69, 69, 0.12); }
+
+  table.tabla-paradas {
+    font-size: 0.78rem;
+    border-collapse: collapse;
+  }
+
+  table.tabla-paradas th, table.tabla-paradas td {
+    padding: 0.25rem 0.6rem 0.25rem 0;
+    border: none;
+    background: transparent;
+    color: var(--texto-tenue);
+    text-align: left;
+    font-weight: 400;
+  }
+
+  table.tabla-paradas th { font-family: "IBM Plex Sans", sans-serif; font-size: 0.68rem; }
+  table.tabla-paradas td:first-child { color: var(--texto); font-family: "IBM Plex Mono", monospace; }
+  table.tabla-paradas .cancelado { color: var(--rojo); }
+
+  .vacio {
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--texto-tenue);
+    font-size: 0.9rem;
+    background: var(--panel);
+  }
+
+  footer {
+    margin-top: 1.25rem;
+    color: var(--texto-tenue);
+    font-size: 0.78rem;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
+  @media (max-width: 600px) {
+    .stats { grid-template-columns: 1fr; }
+
+    .cabecera-lista { display: none; }
+
+    .fila-resumen {
+      grid-template-columns: 1fr;
+      gap: 0.3rem;
+    }
+
+    .fila-resumen span {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .fila-resumen span::before {
+      content: attr(data-label);
+      font-family: "IBM Plex Sans", sans-serif;
+      color: var(--texto-tenue);
+      font-size: 0.72rem;
+    }
+  }
 </style>
 </head>
 <body>
-<h1>RE10 Oslo S &lharu; Tangen &mdash; Retrasos y cancelaciones reclamables</h1>
-<p>Umbral: retraso &ge; 25 min en destino, o cancelacion total/parcial del trayecto.</p>
-<table><thead><tr><th>Fecha</th><th>Sentido</th><th>Incidencia</th><th>Hora prevista</th><th>Hora real</th></tr></thead><tbody><tr>
-  <td>2026-09-03</td>
-  <td>Tangen -> Oslo S</td>
-  <td class="cancelado">Cancelado</td>
-  <td>2026-09-03T23:26:00+02:00</td>
-  <td>-</td>
-</tr>
-</tbody></table>
-<p class="actualizado">Ultima actualizacion: 2026-09-04 01:16 UTC</p>
+<main>
+  <header>
+    <div>
+      <h1><span class="linea">RE10</span> · Oslo S &#8646; Tangen</h1>
+      <p class="subtitulo">Retrasos &#8805;25 min o cancelaciones, en cualquiera de los dos sentidos</p>
+    </div>
+    <div class="estado"><span class="punto"></span>revisado cada 15 min</div>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="valor">1</div>
+      <div class="etiqueta">incidencias registradas</div>
+    </div>
+    <div class="stat">
+      <div class="valor">-</div>
+      <div class="etiqueta">retraso medio (min)</div>
+    </div>
+    <div class="stat">
+      <div class="valor">1</div>
+      <div class="etiqueta">cancelaciones</div>
+    </div>
+  </div>
+
+  <div class="panel-lista"><div class="cabecera-lista"><span>Fecha</span><span>Sentido</span><span>Incidencia</span><span>Prevista</span><span>Real</span></div><details class="fila-item">
+<summary class="fila-resumen">
+  <span data-label="Fecha">2026-09-03</span>
+  <span data-label="Sentido">Tangen -> Oslo S</span>
+  <span data-label="Incidencia"><span class="estado-fila cancelado">Cancelado</span></span>
+  <span data-label="Prevista">03/09/2026 23:26</span>
+  <span data-label="Real">-</span>
+</summary>
+<div class="fila-detalle"><p class="sin-detalle">Sin datos de paradas intermedias.</p></div>
+</details>
+</div>
+
+  <footer>Ultima revision: 04/09/2026 11:00 CET/CEST</footer>
+</main>
 </body>
 </html>
