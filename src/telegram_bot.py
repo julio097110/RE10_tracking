@@ -18,6 +18,8 @@ import utils
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
+URL_WEB = "https://julio097110.github.io/RE10_tracking/"
+
 
 def enviar_alerta(mensaje: str) -> bool:
     """
@@ -65,7 +67,9 @@ def formatear_mensaje(registro: dict) -> str:
             f"Sentido: {registro['sentido']}\n"
             f"Fecha: {registro['fecha_viaje']}\n"
             f"Hora prevista: {utils.formatear_hora(registro['hora_prevista_llegada'])}\n"
-            f"{detalle}"
+            f"{detalle}\n"
+            f"\n"
+            f"Ver detalle: {URL_WEB}"
         )
 
     return (
@@ -74,7 +78,9 @@ def formatear_mensaje(registro: dict) -> str:
         f"Fecha: {registro['fecha_viaje']}\n"
         f"Retraso: {registro['retraso_minutos']} min\n"
         f"Hora prevista: {utils.formatear_hora(registro['hora_prevista_llegada'])}\n"
-        f"Hora real: {utils.formatear_hora(registro['hora_real_llegada'])}"
+        f"Hora real: {utils.formatear_hora(registro['hora_real_llegada'])}\n"
+        f"\n"
+        f"Ver detalle: {URL_WEB}"
     )
 
 
