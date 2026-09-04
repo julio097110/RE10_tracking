@@ -2,7 +2,7 @@ name: Comprobar retrasos RE10
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7,13,22,28,37,43,52,58 * * * *"
   workflow_dispatch: {}
 
 permissions:
