@@ -58,6 +58,31 @@ query($stopId: String!, $numDep: Int!, $timeRange: Int!) {
 """
 
 
+def _consultar_graphql(query: str, variables: dict) -> dict:
+    """
+    Hace una petición POST a la API de Entur con reintentos ante fallos
+    de conexión, y devuelve el JSON de la respuesta ya parseado.
+    Se usa tanto para consultar llegadas a una estación como para
+    consultar el itinerario completo de un servicio concreto.
+    """
+    intentos = 3
+    for intento in range(1, intentos + 1):
+        try:
+            respuesta = requests.post(
+                URL_API,
+                json={"query": query, "variables": variables},
+                headers=CABECERAS,
+                timeout=15,
+            )
+            respuesta.raise_for_status()
+            return respuesta.json()
+        except requests.exceptions.ConnectionError as error:
+            if intento == intentos:
+                raise
+            print(f"Fallo de conexión (intento {intento}/{intentos}): {error}. Reintentando en 5s...")
+            time.sleep(5)
+
+
 def obtener_llegadas(stop_place_id: str, num_llegadas: int = 20, ventana_horas: int = 20) -> list[dict]:
     """
     Pide a Entur las próximas llegadas a una estación (todas las líneas),
@@ -71,27 +96,7 @@ def obtener_llegadas(stop_place_id: str, num_llegadas: int = 20, ventana_horas: 
         "timeRange": ventana_horas * 3600,
     }
 
-    # Reintentamos hasta 3 veces si hay un fallo de conexión (no si Entur
-    # responde con un error "de verdad", como un 400 por una consulta mal
-    # formada -- eso no se arregla reintentando).
-    intentos = 3
-    for intento in range(1, intentos + 1):
-        try:
-            respuesta = requests.post(
-                URL_API,
-                json={"query": QUERY, "variables": variables},
-                headers=CABECERAS,
-                timeout=15,
-            )
-            respuesta.raise_for_status()  # error si Entur responde con código de fallo (4xx/5xx)
-            break  # si ha ido bien, salimos del bucle de reintentos
-        except requests.exceptions.ConnectionError as error:
-            if intento == intentos:
-                raise  # ya hemos agotado los reintentos, dejamos que falle de verdad
-            print(f"Fallo de conexión (intento {intento}/{intentos}): {error}. Reintentando en 5s...")
-            time.sleep(5)
-
-    datos = respuesta.json()
+    datos = _consultar_graphql(QUERY, variables)
     llamadas = datos["data"]["stopPlace"]["estimatedCalls"]
 
     # Filtramos aquí, en Python, en vez de pedirle a Entur que filtre por
@@ -102,6 +107,51 @@ def obtener_llegadas(stop_place_id: str, num_llegadas: int = 20, ventana_horas: 
         if llamada["serviceJourney"]["line"]["publicCode"] == LINEA_RE10
     ]
     return llegadas_re10
+
+
+QUERY_ITINERARIO = """
+query($id: String!) {
+  serviceJourney(id: $id) {
+    id
+    estimatedCalls {
+      quay {
+        name
+      }
+      aimedArrivalTime
+      expectedArrivalTime
+      actualArrivalTime
+      cancellation
+    }
+  }
+}
+"""
+
+
+def obtener_itinerario(service_journey_id: str) -> list[dict]:
+    """
+    Consulta el itinerario completo de un servicio concreto: todas las
+    paradas que hace, en orden, con su hora prevista, hora real
+    (o estimada si aún no hay real) y si esa parada en concreto se
+    canceló. Se usa tanto para trenes cancelados como para trenes con
+    retraso, para poder mostrar el detalle parada a parada.
+
+    Devuelve una lista vacía si Entur ya no tiene datos de ese servicio.
+    """
+    datos = _consultar_graphql(QUERY_ITINERARIO, {"id": service_journey_id})
+    servicio = datos.get("data", {}).get("serviceJourney")
+
+    if servicio is None:
+        return []
+
+    paradas = []
+    for llamada in servicio["estimatedCalls"]:
+        paradas.append({
+            "estacion": llamada["quay"]["name"],
+            "hora_prevista": llamada["aimedArrivalTime"],
+            "hora_real": llamada["actualArrivalTime"] or llamada["expectedArrivalTime"],
+            "cancelado": llamada["cancellation"],
+        })
+    return paradas
 
 
 if __name__ == "__main__":

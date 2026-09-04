@@ -52,11 +52,20 @@ def formatear_mensaje(registro: dict) -> str:
     'retrasos' (un diccionario, tal y como lo devuelve db.obtener_retrasos()).
     """
     if registro["cancelado"]:
+        origen = registro["sentido"].split(" -> ")[0]
+        if registro.get("paso_por_origen") is True:
+            detalle = f"Salió de {origen}. Última parada antes de cancelarse: {registro.get('ultima_parada') or 'desconocida'}"
+        elif registro.get("paso_por_origen") is False:
+            detalle = f"No llegó a salir de {origen}"
+        else:
+            detalle = "No se ha podido determinar el detalle del recorrido"
+
         return (
             f"🚫 RE10 CANCELADO\n"
             f"Sentido: {registro['sentido']}\n"
             f"Fecha: {registro['fecha_viaje']}\n"
-            f"Hora prevista: {utils.formatear_hora(registro['hora_prevista_llegada'])}"
+            f"Hora prevista: {utils.formatear_hora(registro['hora_prevista_llegada'])}\n"
+            f"{detalle}"
         )
 
     return (

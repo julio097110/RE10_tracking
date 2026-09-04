@@ -55,7 +55,10 @@ CREATE TABLE IF NOT EXISTS retrasos (
     tipo_incidencia TEXT NOT NULL,
     detectado_en TEXT NOT NULL,
     avisado_telegram INTEGER NOT NULL DEFAULT 0,
-    service_journey_id TEXT NOT NULL UNIQUE
+    service_journey_id TEXT NOT NULL UNIQUE,
+    paso_por_origen INTEGER,
+    ultima_parada TEXT,
+    paradas_intermedias TEXT
 );
 """
 
@@ -88,6 +91,9 @@ def insertar_retraso(
     tipo_incidencia: str,
     detectado_en: str,
     service_journey_id: str,
+    paso_por_origen: bool | None = None,
+    ultima_parada: str | None = None,
+    paradas_intermedias: str | None = None,
 ) -> int | None:
     """
     Guarda un nuevo registro de retraso/cancelación.
@@ -108,13 +114,16 @@ def insertar_retraso(
             INSERT INTO retrasos (
                 fecha_viaje, linea, sentido, estacion_origen, estacion_destino,
                 hora_prevista_llegada, hora_real_llegada, retraso_minutos,
-                cancelado, tipo_incidencia, detectado_en, service_journey_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                cancelado, tipo_incidencia, detectado_en, service_journey_id,
+                paso_por_origen, ultima_parada, paradas_intermedias
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fecha_viaje, linea, sentido, estacion_origen, estacion_destino,
                 hora_prevista_llegada, hora_real_llegada, retraso_minutos,
                 int(cancelado), tipo_incidencia, detectado_en, service_journey_id,
+                None if paso_por_origen is None else int(paso_por_origen), ultima_parada,
+                paradas_intermedias,
             ),
         )
         conexion.commit()

@@ -6,11 +6,49 @@ si alguna cumple el criterio de reclamación (retraso >= 25 min o
 cancelación), y la guarda en la base de datos si es así.
 """
 
+import json
 from datetime import datetime, timezone
 
 import db
 import entur_client as entur
 import telegram_bot
+
+def extraer_tramo(paradas: list[dict], estacion_a: str, estacion_b: str) -> list[dict]:
+    """
+    De la lista completa de paradas de un servicio (que puede incluir
+    tramos de la línea que no nos interesan, como Drammen o Lillehammer),
+    se queda solo con el tramo entre estacion_a y estacion_b, ambas
+    incluidas -- sea cual sea el sentido en que aparezcan.
+    """
+    indices = [
+        i for i, p in enumerate(paradas)
+        if estacion_a.lower() in p["estacion"].lower() or estacion_b.lower() in p["estacion"].lower()
+    ]
+    if len(indices) < 2:
+        return []  # no hemos podido localizar las dos estaciones de referencia
+
+    inicio, fin = min(indices), max(indices)
+    return paradas[inicio:fin + 1]
+
+
+def analizar_cancelacion(paradas: list[dict], estacion_origen: str) -> tuple[bool | None, str | None]:
+    """
+    A partir del itinerario completo, calcula si el tren llegó a
+    servir la estación de origen, y cuál fue la última parada real
+    en todo su recorrido.
+    """
+    if not paradas:
+        return None, None
+
+    paradas_servidas = [p for p in paradas if not p["cancelado"]]
+    ultima_parada = paradas_servidas[-1]["estacion"] if paradas_servidas else None
+
+    paso_por_origen = any(
+        estacion_origen.lower() in p["estacion"].lower() and not p["cancelado"]
+        for p in paradas
+    )
+    return paso_por_origen, ultima_parada
+
 
 UMBRAL_MINUTOS = 25
 
@@ -107,6 +145,15 @@ def revisar_sentido(config_sentido: dict) -> list[dict]:
         if resultado is None:
             continue
 
+        paradas_completas = entur.obtener_itinerario(llegada["serviceJourney"]["id"])
+        tramo = extraer_tramo(paradas_completas, "Oslo S", "Tangen")
+
+        paso_por_origen, ultima_parada = (None, None)
+        if resultado["cancelado"]:
+            paso_por_origen, ultima_parada = analizar_cancelacion(
+                paradas_completas, config_sentido["estacion_origen"]
+            )
+
         nuevo_id = db.insertar_retraso(
             fecha_viaje=llegada["aimedArrivalTime"][:10],  # "2026-09-01T15:26:00+02:00" -> "2026-09-01"
             linea=entur.LINEA_RE10,
@@ -120,6 +167,9 @@ def revisar_sentido(config_sentido: dict) -> list[dict]:
             tipo_incidencia=resultado["tipo_incidencia"],
             detectado_en=datetime.now(timezone.utc).isoformat(),
             service_journey_id=llegada["serviceJourney"]["id"],
+            paso_por_origen=paso_por_origen,
+            ultima_parada=ultima_parada,
+            paradas_intermedias=json.dumps(tramo, ensure_ascii=False),
         )
 
         if nuevo_id is not None:
@@ -131,6 +181,9 @@ def revisar_sentido(config_sentido: dict) -> list[dict]:
                 "hora_real_llegada": resultado["hora_real_llegada"],
                 "retraso_minutos": resultado["retraso_minutos"],
                 "cancelado": resultado["cancelado"],
+                "paso_por_origen": paso_por_origen,
+                "ultima_parada": ultima_parada,
+                "paradas_intermedias": tramo,
             }
 
             mensaje = telegram_bot.formatear_mensaje(registro)

@@ -6,6 +6,8 @@ retrasos/cancelaciones guardados en la base de datos, para poder
 consultarlo desde GitHub Pages.
 """
 
+import json
+
 import db
 import utils
 
@@ -114,37 +116,53 @@ PLANTILLA = """<!DOCTYPE html>
     margin-top: 0.2rem;
   }}
 
-  .tabla-envoltorio {{
-    overflow-x: auto;
+  .panel-lista {{
     border: 1px solid var(--panel-border);
   }}
 
-  table {{
-    width: 100%;
-    border-collapse: collapse;
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 0.85rem;
-    white-space: nowrap;
-  }}
-
-  th {{
-    text-align: left;
+  .cabecera-lista {{
+    display: grid;
+    grid-template-columns: 100px 150px 1fr 130px 130px;
+    gap: 0.5rem;
+    padding: 0.7rem 0.9rem;
     font-family: "IBM Plex Sans", sans-serif;
     font-size: 0.72rem;
     letter-spacing: 0.06em;
     color: var(--texto-tenue);
-    font-weight: 500;
-    padding: 0.7rem 0.9rem;
     border-bottom: 1px solid var(--panel-border);
   }}
 
-  td {{
-    padding: 0.7rem 0.9rem;
+  .fila-item {{
     border-bottom: 1px solid var(--panel-border);
     background: var(--panel);
   }}
 
-  tr:last-child td {{ border-bottom: none; }}
+  .fila-item:last-child {{ border-bottom: none; }}
+
+  .fila-resumen {{
+    display: grid;
+    grid-template-columns: 100px 150px 1fr 130px 130px;
+    gap: 0.5rem;
+    align-items: center;
+    padding: 0.7rem 0.9rem;
+    cursor: pointer;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.85rem;
+    list-style: none;
+  }}
+
+  .fila-resumen::-webkit-details-marker {{ display: none; }}
+
+  .fila-item[open] .fila-resumen {{ border-bottom: 1px solid var(--panel-border); }}
+
+  .fila-detalle {{ padding: 0.8rem 0.9rem 1rem; }}
+
+  .sin-detalle {{
+    color: var(--texto-tenue);
+    font-size: 0.8rem;
+    margin: 0;
+    font-family: "IBM Plex Sans", sans-serif;
+  }}
 
   .estado-fila {{
     display: inline-block;
@@ -155,6 +173,24 @@ PLANTILLA = """<!DOCTYPE html>
 
   .estado-fila.retraso {{ color: var(--ambar); background: rgba(232, 163, 61, 0.12); }}
   .estado-fila.cancelado {{ color: var(--rojo); background: rgba(214, 69, 69, 0.12); }}
+
+  table.tabla-paradas {{
+    font-size: 0.78rem;
+    border-collapse: collapse;
+  }}
+
+  table.tabla-paradas th, table.tabla-paradas td {{
+    padding: 0.25rem 0.6rem 0.25rem 0;
+    border: none;
+    background: transparent;
+    color: var(--texto-tenue);
+    text-align: left;
+    font-weight: 400;
+  }}
+
+  table.tabla-paradas th {{ font-family: "IBM Plex Sans", sans-serif; font-size: 0.68rem; }}
+  table.tabla-paradas td:first-child {{ color: var(--texto); font-family: "IBM Plex Mono", monospace; }}
+  table.tabla-paradas .cancelado {{ color: var(--rojo); }}
 
   .vacio {{
     padding: 2.5rem 1rem;
@@ -174,26 +210,20 @@ PLANTILLA = """<!DOCTYPE html>
   @media (max-width: 600px) {{
     .stats {{ grid-template-columns: 1fr; }}
 
-    table, thead, tbody, tr, td {{ display: block; width: 100%; }}
-    thead {{ display: none; }}
+    .cabecera-lista {{ display: none; }}
 
-    tr {{
-      border-bottom: 1px solid var(--panel-border);
-      padding: 0.7rem 0.9rem;
+    .fila-resumen {{
+      grid-template-columns: 1fr;
+      gap: 0.3rem;
     }}
 
-    tr:last-child {{ border-bottom: none; }}
-
-    td {{
-      border-bottom: none;
-      padding: 0.2rem 0;
-      white-space: normal;
+    .fila-resumen span {{
       display: flex;
       justify-content: space-between;
       gap: 1rem;
     }}
 
-    td::before {{
+    .fila-resumen span::before {{
       content: attr(data-label);
       font-family: "IBM Plex Sans", sans-serif;
       color: var(--texto-tenue);
@@ -235,33 +265,70 @@ PLANTILLA = """<!DOCTYPE html>
 </html>
 """
 
-FILA_TABLA = """<tr>
-  <td data-label="Fecha">{fecha_viaje}</td>
-  <td data-label="Sentido">{sentido}</td>
-  <td data-label="Incidencia"><span class="estado-fila {clase_css}">{tipo_texto}</span></td>
-  <td data-label="Prevista">{hora_prevista}</td>
-  <td data-label="Real">{hora_real}</td>
-</tr>
+FILA_ITEM = """<details class="fila-item">
+<summary class="fila-resumen">
+  <span data-label="Fecha">{fecha_viaje}</span>
+  <span data-label="Sentido">{sentido}</span>
+  <span data-label="Incidencia"><span class="estado-fila {clase_css}">{tipo_texto}</span></span>
+  <span data-label="Prevista">{hora_prevista}</span>
+  <span data-label="Real">{hora_real}</span>
+</summary>
+<div class="fila-detalle">{detalle}</div>
+</details>
 """
+
+FILA_PARADA = "<tr><td>{estacion}</td><td>{prevista}</td><td>{real}</td></tr>"
+
+
+def _formatear_detalle(paradas_intermedias) -> str:
+    if not paradas_intermedias:
+        return '<p class="sin-detalle">Sin datos de paradas intermedias.</p>'
+
+    filas_paradas = []
+    for parada in paradas_intermedias:
+        if parada["cancelado"]:
+            real = '<span class="cancelado">cancelado</span>'
+        else:
+            real = utils.formatear_hora(parada["hora_real"])
+        filas_paradas.append(FILA_PARADA.format(
+            estacion=parada["estacion"],
+            prevista=utils.formatear_hora(parada["hora_prevista"]),
+            real=real,
+        ))
+
+    return (
+        '<table class="tabla-paradas"><tr><th>Estacion</th><th>Prevista</th><th>Real</th></tr>'
+        + "".join(filas_paradas) +
+        "</table>"
+    )
 
 
 def _formatear_fila(registro) -> str:
     if registro["cancelado"]:
         clase_css = "cancelado"
-        tipo_texto = "Cancelado"
+        origen = registro["sentido"].split(" -> ")[0]
+        if registro["paso_por_origen"] == 1:
+            tipo_texto = f"Cancelado tras {registro['ultima_parada'] or '?'}"
+        elif registro["paso_por_origen"] == 0:
+            tipo_texto = f"Cancelado, no salió de {origen}"
+        else:
+            tipo_texto = "Cancelado"
         hora_real = "-"
     else:
         clase_css = "retraso"
         tipo_texto = f"{registro['retraso_minutos']} min tarde"
         hora_real = utils.formatear_hora(registro["hora_real_llegada"])
 
-    return FILA_TABLA.format(
+    paradas_intermedias = json.loads(registro["paradas_intermedias"]) if registro["paradas_intermedias"] else []
+
+    return FILA_ITEM.format(
         fecha_viaje=registro["fecha_viaje"],
         sentido=registro["sentido"],
         clase_css=clase_css,
         tipo_texto=tipo_texto,
         hora_prevista=utils.formatear_hora(registro["hora_prevista_llegada"]),
         hora_real=hora_real,
+        detalle=_formatear_detalle(paradas_intermedias),
     )
 
 
@@ -270,7 +337,7 @@ def generar_html() -> str:
 
     if not registros:
         tabla = (
-            '<div class="tabla-envoltorio"><div class="vacio">'
+            '<div class="panel-lista"><div class="vacio">'
             "Sin incidencias registradas todavia. En cuanto el RE10 llegue con 25 min de "
             "retraso o se cancele, aparecera aqui."
             "</div></div>"
@@ -279,10 +346,13 @@ def generar_html() -> str:
         # Mostramos las mas recientes primero.
         filas = "".join(_formatear_fila(r) for r in reversed(registros))
         tabla = (
-            '<div class="tabla-envoltorio"><table><thead><tr>'
-            "<th>Fecha</th><th>Sentido</th><th>Incidencia</th>"
-            "<th>Prevista</th><th>Real</th>"
-            "</tr></thead><tbody>" + filas + "</tbody></table></div>"
+            '<div class="panel-lista">'
+            '<div class="cabecera-lista">'
+            "<span>Fecha</span><span>Sentido</span><span>Incidencia</span>"
+            "<span>Prevista</span><span>Real</span>"
+            "</div>"
+            + filas +
+            "</div>"
         )
 
     cancelados = [r for r in registros if r["cancelado"]]
