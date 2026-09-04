@@ -237,9 +237,9 @@ PLANTILLA = """<!DOCTYPE html>
   <header>
     <div>
       <h1><span class="linea">RE10</span> · Oslo S &#8646; Tangen</h1>
-      <p class="subtitulo">Retrasos &#8805;25 min o cancelaciones, en cualquiera de los dos sentidos</p>
+      <p class="subtitulo">Retrasos &#8805; 25 min o cancelaciones, en cualquiera de los dos sentidos</p>
     </div>
-    <div class="estado"><span class="punto"></span>revisado cada 15 min</div>
+    <div class="estado"><span class="punto"></span>revisado cada 5-9 min</div>
   </header>
 
   <div class="stats">
